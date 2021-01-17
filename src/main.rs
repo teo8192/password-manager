@@ -10,6 +10,8 @@ use structopt::StructOpt;
 
 use openssl::rand::rand_bytes;
 
+use dialoguer::Password;
+
 #[derive(StructOpt)]
 #[structopt(name = "spm", about = "Simple Password Manager.")]
 struct CliOpt {
@@ -82,23 +84,28 @@ fn main() -> Result<(), String> {
         .collect();
 
     let (salt, nonce, mut password, insert) = if row.is_empty() {
-        if let Some(password) = args.pass1 {
-            // generate random bytes
-            let mut buf = [0; 256];
-            rand_bytes(&mut buf).unwrap();
-            let mut buf = buf.iter().copied();
+        // generate random bytes
+        let mut buf = [0; 256];
+        rand_bytes(&mut buf).unwrap();
+        let mut buf = buf.iter().copied();
 
-            // take some random bytes to create salt and nonce
-            let salt: Vec<u8> = (&mut buf).take(16).collect();
-            let nonce: Vec<u8> = buf.take(8).collect();
+        // take some random bytes to create salt and nonce
+        let salt: Vec<u8> = (&mut buf).take(16).collect();
+        let nonce: Vec<u8> = buf.take(8).collect();
 
+        let password = if let Some(password) = args.pass1 {
             // convert the password from a string to a byte vector
-            let password = password.into_bytes();
-
-            (salt, nonce, password, true)
+            password
         } else {
-            unimplemented!();
+            Password::new()
+                .with_prompt("Password")
+                .with_confirmation("Confirm password", "Passwords mismatching")
+                .interact()
+                .map_err(|e| e.to_string())?
         }
+        .into_bytes();
+
+        (salt, nonce, password, true)
     } else {
         // extract some stuff from the vector
         let row = if let Some(row) = row.pop() {

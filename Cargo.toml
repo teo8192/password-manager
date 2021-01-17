@@ -11,3 +11,5 @@ codes = { git = "https://github.com/teo8192/codes.git", branch = "master" }
 rusqlite = "0.24"
 structopt = "0.3"
 openssl = "0.10"
+
+dialoguer = "0.7"
