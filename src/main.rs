@@ -94,23 +94,7 @@ fn unpad_password(password: Vec<u8>) -> Result<String, String> {
     }
 }
 
-fn main() -> Result<(), String> {
-    let args = CliOpt::from_args();
-
-    let mut conn = Connection::open(args.database.unwrap_or_else(|| "./passwords.db".to_owned()))
-        .map_err(|e| e.to_string())?;
-
-    conn.execute(
-        "create table if not exists passwords (
-            name text not null primary key,
-            salt text not null unique,
-            nonce text not null unique,
-            password text not null unique
-        )",
-        NO_PARAMS,
-    )
-    .map_err(|e| e.to_string())?;
-
+fn rw_password(args: &CliOpt, conn: &mut Connection) -> Result<(), String> {
     let mut row: Vec<Row> = conn
         .prepare("SELECT * FROM passwords where name = (?1);")
         .map_err(|e| e.to_string())?
@@ -139,7 +123,7 @@ fn main() -> Result<(), String> {
         let salt: Vec<u8> = (&mut buf).take(16).collect();
         let nonce: Vec<u8> = buf.take(8).collect();
 
-        let password = pad_password(if let Some(password) = args.pass1 {
+        let password = pad_password(if let Some(password) = args.pass1.clone() {
             // convert the password from a string to a byte vector
             password
         } else if args.generate {
@@ -196,11 +180,30 @@ fn main() -> Result<(), String> {
         tx.commit().map_err(|e| e.to_string())?;
     } else {
         // print the decrypted password
-        println!(
-            "{}",
-            unpad_password(password)?
-        );
+        println!("{}", unpad_password(password)?);
     }
+
+    Ok(())
+}
+
+fn main() -> Result<(), String> {
+    let args = CliOpt::from_args();
+
+    let mut conn = Connection::open(&args.database.clone().unwrap_or_else(|| "./passwords.db".to_owned()))
+        .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "create table if not exists passwords (
+            name text not null primary key,
+            salt text not null unique,
+            nonce text not null unique,
+            password text not null unique
+        )",
+        NO_PARAMS,
+    )
+    .map_err(|e| e.to_string())?;
+
+    rw_password(&args, &mut conn)?;
 
     Ok(())
 }
