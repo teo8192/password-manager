@@ -11,7 +11,7 @@ use structopt::StructOpt;
 use openssl::rand::rand_bytes;
 
 #[derive(StructOpt)]
-#[structopt(name = "pm", about = "Password Manager.")]
+#[structopt(name = "spm", about = "Simple Password Manager.")]
 struct CliOpt {
     #[structopt(long)]
     pass0: String,

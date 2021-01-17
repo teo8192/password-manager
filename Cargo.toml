@@ -1,5 +1,5 @@
 [package]
-name = "password_manager"
+name = "smp"
 version = "0.1.0"
 authors = ["Teo <teodor@dahlknutsen.no>"]
 edition = "2018"
