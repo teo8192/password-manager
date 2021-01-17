@@ -15,4 +15,8 @@ Each password stored has a unique 128 bit salt for `pbkdf2` and a unique nonce f
 
 Salts and nonces are generated using openssl.
 
+The passwords stored in the database are padded to the same length, to not give away any length information to attackers.
+The first four bytes are the length of the password in a little endian order.
+Then next n bytes are the password, and the rest are undefined (now only padded 0 bytes).
+
 I am unsure of the impact of using the same password into `pbkdf2`, but different salts.

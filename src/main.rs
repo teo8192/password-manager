@@ -33,11 +33,11 @@ struct Row {
     password: String,
 }
 
-pub fn to_hex(bytes: Vec<u8>) -> String {
+fn to_hex(bytes: Vec<u8>) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-pub fn from_hex(bytes: String) -> Vec<u8> {
+fn from_hex(bytes: String) -> Vec<u8> {
     bytes
         .into_bytes()
         .chunks_mut(2)
@@ -46,6 +46,40 @@ pub fn from_hex(bytes: String) -> Vec<u8> {
                 .expect("could not convert from hex")
         })
         .collect()
+}
+
+fn pad_password(password: String) -> Result<Vec<u8>, String> {
+    let password = password.into_bytes();
+    let length = password.len();
+
+    let max_length = 128 - 4;
+
+    if length >= max_length {
+        return Err(format!("Password too long! (max size: {})", max_length));
+    }
+    let padding = max_length - length;
+    Ok((length as u32)
+        .to_le_bytes()
+        .iter()
+        .cloned()
+        .chain(password.iter().cloned())
+        .chain(std::iter::repeat(0).take(padding))
+        .collect())
+}
+
+fn unpad_password(password: Vec<u8>) -> Result<String, String> {
+    let mut iterator = password.iter();
+
+    let mut bytes = [0u8; 4];
+    for (inp, res) in (&mut iterator).take(4).zip(bytes.iter_mut()) {
+        *res = *inp;
+    }
+
+    let length = u32::from_le_bytes(bytes);
+    match std::str::from_utf8(&iterator.take(length as usize).cloned().collect::<Vec<u8>>()) {
+        Err(e) => Err(e.to_string()),
+        Ok(s) => Ok(s.to_owned()),
+    }
 }
 
 fn main() -> Result<(), String> {
@@ -93,7 +127,7 @@ fn main() -> Result<(), String> {
         let salt: Vec<u8> = (&mut buf).take(16).collect();
         let nonce: Vec<u8> = buf.take(8).collect();
 
-        let password = if let Some(password) = args.pass1 {
+        let password = pad_password(if let Some(password) = args.pass1 {
             // convert the password from a string to a byte vector
             password
         } else {
@@ -102,8 +136,7 @@ fn main() -> Result<(), String> {
                 .with_confirmation("Confirm password", "Passwords mismatching")
                 .interact()
                 .map_err(|e| e.to_string())?
-        }
-        .into_bytes();
+        })?;
 
         (salt, nonce, password, true)
     } else {
@@ -151,7 +184,7 @@ fn main() -> Result<(), String> {
         // print the decrypted password
         println!(
             "{}",
-            std::str::from_utf8(&password).map_err(|e| e.to_string())?
+            unpad_password(password)?
         );
     }
 
