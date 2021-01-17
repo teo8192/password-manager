@@ -6,30 +6,13 @@ use codes::crypt::Cipher;
 use rusqlite::NO_PARAMS;
 use rusqlite::{Connection, Result};
 
-use structopt::StructOpt;
-
 use openssl::{base64, rand::rand_bytes};
 
 use dialoguer::Password;
 
-#[derive(StructOpt)]
-#[structopt(name = "spm", about = "Simple Password Manager.")]
-struct CliOpt {
-    #[structopt(long)]
-    pass0: String,
-    #[structopt(long)]
-    pass1: Option<String>,
-    #[structopt(short, long)]
-    name: String,
-    #[structopt(long)]
-    database: Option<String>,
-    #[structopt(short, long)]
-    generate: bool,
-    #[structopt(short, long)]
-    remove: bool,
-    #[structopt(short, long)]
-    list: bool,
-}
+mod config;
+
+use config::{parse_config, RwConfig};
 
 #[derive(Debug)]
 struct Row {
@@ -98,7 +81,7 @@ fn unpad_password(password: Vec<u8>) -> Result<String, String> {
     }
 }
 
-fn rw_password(args: &CliOpt, conn: &mut Connection) -> Result<(), String> {
+fn rw_password(args: &RwConfig, conn: &mut Connection) -> Result<(), String> {
     let mut row: Vec<Row> = conn
         .prepare("SELECT * FROM passwords where name = (?1);")
         .map_err(|e| e.to_string())?
@@ -117,21 +100,21 @@ fn rw_password(args: &CliOpt, conn: &mut Connection) -> Result<(), String> {
         })
         .collect();
 
-    let (salt, nonce, mut password, insert) = if row.is_empty() {
+    let (salt, nonce, mut password, insert): (Vec<u8>, Vec<u8>, Vec<u8>, bool) = if row.is_empty() {
         // generate random bytes
         let mut buf = [0; 256];
         rand_bytes(&mut buf).unwrap();
         let mut buf = buf.iter().copied();
 
         // take some random bytes to create salt and nonce
-        let salt: Vec<u8> = (&mut buf).take(16).collect();
+        let salt: Vec<u8> = (&mut buf).take(args.nsaltbytes).collect();
         let nonce: Vec<u8> = buf.take(8).collect();
 
-        let password = pad_password(if let Some(password) = args.pass1.clone() {
+        let password = pad_password(if let Some(password) = args.password.clone() {
             // convert the password from a string to a byte vector
             password
         } else if args.generate {
-            generate_password(16)?
+            generate_password(args.genlen)?
         } else {
             Password::new()
                 .with_prompt("Password")
@@ -158,8 +141,23 @@ fn rw_password(args: &CliOpt, conn: &mut Connection) -> Result<(), String> {
         )
     };
 
+    let encrypt_pass = if let Some(password) = args.encryption_password.as_ref() {
+        password.clone()
+    } else {
+        Password::new()
+            .with_prompt("Encryption password")
+            .interact()
+            .map_err(|e| e.to_string())?
+    };
+
     // generate the key
-    let key_vec = pbkdf2(args.pass0.as_ref(), &salt, 1 << 14, 256, &HMAC::default());
+    let key_vec = pbkdf2(
+        encrypt_pass.as_ref(),
+        &salt,
+        args.iter_count,
+        256,
+        &HMAC::default(),
+    );
 
     // copy the key over to a known size
     let mut key = [0u8; 32];
@@ -191,15 +189,9 @@ fn rw_password(args: &CliOpt, conn: &mut Connection) -> Result<(), String> {
 }
 
 fn main() -> Result<(), String> {
-    let args = CliOpt::from_args();
+    let config = parse_config()?;
 
-    let mut conn = Connection::open(
-        &args
-            .database
-            .clone()
-            .unwrap_or_else(|| "./passwords.db".to_owned()),
-    )
-    .map_err(|e| e.to_string())?;
+    let mut conn = Connection::open(&config.database).map_err(|e| e.to_string())?;
 
     conn.execute(
         "create table if not exists passwords (
@@ -212,18 +204,20 @@ fn main() -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    if args.remove {
+    if !config.remove && !config.list {
+        rw_password(&config.rw_config.unwrap(), &mut conn)?;
+    }
+
+    if config.remove {
         // insert the generated values
         let tx = conn.transaction().map_err(|e| e.to_string())?;
         // insert the stuff into the database
-        tx.execute("DELETE FROM passwords WHERE name = (?1)", &[&args.name])
+        tx.execute("DELETE FROM passwords WHERE name = (?1)", &[&config.name])
             .map_err(|e| e.to_string())?;
         tx.commit().map_err(|e| e.to_string())?;
-    } else if !args.list {
-        rw_password(&args, &mut conn)?;
     }
 
-    if args.list {
+    if config.list {
         #[derive(Debug)]
         struct R {
             name: String,
