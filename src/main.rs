@@ -108,7 +108,12 @@ fn main() -> Result<(), String> {
         };
 
         // convert the stuff from the database
-        (from_hex(row.salt), from_hex(row.nonce), from_hex(row.password), false)
+        (
+            from_hex(row.salt),
+            from_hex(row.nonce),
+            from_hex(row.password),
+            false,
+        )
     };
 
     // generate the key
