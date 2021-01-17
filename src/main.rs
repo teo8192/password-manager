@@ -25,6 +25,10 @@ struct CliOpt {
     database: Option<String>,
     #[structopt(short, long)]
     generate: bool,
+    #[structopt(short, long)]
+    remove: bool,
+    #[structopt(short, long)]
+    list: bool,
 }
 
 #[derive(Debug)]
@@ -189,8 +193,13 @@ fn rw_password(args: &CliOpt, conn: &mut Connection) -> Result<(), String> {
 fn main() -> Result<(), String> {
     let args = CliOpt::from_args();
 
-    let mut conn = Connection::open(&args.database.clone().unwrap_or_else(|| "./passwords.db".to_owned()))
-        .map_err(|e| e.to_string())?;
+    let mut conn = Connection::open(
+        &args
+            .database
+            .clone()
+            .unwrap_or_else(|| "./passwords.db".to_owned()),
+    )
+    .map_err(|e| e.to_string())?;
 
     conn.execute(
         "create table if not exists passwords (
@@ -203,7 +212,32 @@ fn main() -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    rw_password(&args, &mut conn)?;
+    if args.remove {
+        // insert the generated values
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        // insert the stuff into the database
+        tx.execute("DELETE FROM passwords WHERE name = (?1)", &[&args.name])
+            .map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())?;
+    } else if !args.list {
+        rw_password(&args, &mut conn)?;
+    }
+
+    if args.list {
+        #[derive(Debug)]
+        struct R {
+            name: String,
+        }
+
+        for name in conn
+            .prepare("SELECT name FROM passwords;")
+            .map_err(|e| e.to_string())?
+            .query_map(NO_PARAMS, |row| Ok(R { name: row.get(0)? }))
+            .map_err(|e| e.to_string())?
+        {
+            println!("{}", name.map_err(|e| e.to_string())?.name);
+        }
+    }
 
     Ok(())
 }
