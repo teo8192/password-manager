@@ -8,7 +8,7 @@ use rusqlite::{Connection, Result};
 
 use structopt::StructOpt;
 
-use openssl::rand::rand_bytes;
+use openssl::{base64, rand::rand_bytes};
 
 use dialoguer::Password;
 
@@ -23,6 +23,8 @@ struct CliOpt {
     name: String,
     #[structopt(long)]
     database: Option<String>,
+    #[structopt(short, long)]
+    generate: bool,
 }
 
 #[derive(Debug)]
@@ -65,6 +67,16 @@ fn pad_password(password: String) -> Result<Vec<u8>, String> {
         .chain(password.iter().cloned())
         .chain(std::iter::repeat(0).take(padding))
         .collect())
+}
+
+fn generate_password(length: usize) -> Result<String, String> {
+    let mut bytes = [0u8; 256];
+    rand_bytes(&mut bytes).map_err(|e| e.to_string())?;
+
+    let mut res = base64::encode_block(&bytes[..]);
+    res.truncate(length);
+
+    Ok(res)
 }
 
 fn unpad_password(password: Vec<u8>) -> Result<String, String> {
@@ -130,6 +142,8 @@ fn main() -> Result<(), String> {
         let password = pad_password(if let Some(password) = args.pass1 {
             // convert the password from a string to a byte vector
             password
+        } else if args.generate {
+            generate_password(16)?
         } else {
             Password::new()
                 .with_prompt("Password")
