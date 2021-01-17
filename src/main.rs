@@ -49,7 +49,7 @@ pub fn from_hex(bytes: String) -> Vec<u8> {
 fn main() -> Result<(), String> {
     let args = CliOpt::from_args();
 
-    let mut conn = Connection::open(args.database.unwrap_or("./passwords.db".to_owned()))
+    let mut conn = Connection::open(args.database.unwrap_or_else(|| "./passwords.db".to_owned()))
         .map_err(|e| e.to_string())?;
 
     conn.execute(
