@@ -74,7 +74,7 @@ fn main() -> Result<(), String> {
         tx.commit().map_err(|e| e.to_string())?;
     }
 
-    // if listing 
+    // if listing
     if config.list {
         #[derive(Debug)]
         struct R {

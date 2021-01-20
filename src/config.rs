@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use structopt::StructOpt;
 
 use std::process::Command;
@@ -21,9 +23,9 @@ struct CliOpt {
     /// Name of the password
     name: Option<String>,
 
-    #[structopt(long, default_value = "./passwords.db")]
+    #[structopt(long, default_value = "./passwords.db", parse(from_os_str))]
     /// The name of the password database
-    database: String,
+    database: PathBuf,
 
     #[structopt(short, long)]
     /// Generate a random password
@@ -37,13 +39,18 @@ struct CliOpt {
     /// List all passwords in the database
     list: bool,
 
-    #[structopt(long, default_value = "16", required_if("generate", "true"))]
+    #[structopt(long, default_value = "16")]
     /// Length of the generated password
     generation_length: usize,
 
-    #[structopt(long, default_value = "16")]
-    /// number of salt bytes
+    #[structopt(short, long, default_value = "32")]
+    /// Number of salt bytes used in the input to PBKDF2
     salt_bytes: usize,
+
+    #[structopt(short, long, default_value = "2048")]
+    /// Number of iterations for PBKDF2.
+    /// Recommendations from RFC8018: 1000 should be suitable, 10,000,000 for critical applications where user-perceived performance is not critical
+    iteration_count: usize,
 
     #[structopt(long)]
     /// Command to get a password, e.g. 'dmenu -P -p'.
@@ -72,14 +79,14 @@ pub struct RwConfig<T: GetPassword> {
     pub name: String,
     /// number of bytes in the pbkdf2 salt (default 16)
     pub nsaltbytes: usize,
-    /// iteration count for pbkdf2 (default 1 << 14). Possible values (based on reccomendation from RFC8018), 1000 sould be suitable, 10,000,000 for critical applications where user-percieved performance is not critical
+    /// iteration count for pbkdf2 (default 1 << 14). Possible values (based on reccomendation from RFC8018), 
     pub iter_count: usize,
 }
 
 /// the config
 pub struct Config<T: GetPassword> {
     /// name of password database
-    pub database: String,
+    pub database: PathBuf,
     /// list passwords
     pub list: bool,
     /// remove the selected password
@@ -239,7 +246,7 @@ pub fn parse_config() -> Result<Config<PasswordRunner>, String> {
                 ),
                 name,
                 nsaltbytes: args.salt_bytes,
-                iter_count: 1 << 11,
+                iter_count: args.iteration_count,
             })
         },
     })
