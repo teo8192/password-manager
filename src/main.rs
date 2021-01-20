@@ -8,11 +8,9 @@ use rusqlite::{Connection, Result};
 
 use openssl::{base64, rand::rand_bytes};
 
-use dialoguer::Password;
-
 mod config;
 
-use config::{parse_config, RwConfig};
+use config::{parse_config, GetPassword, RwConfig};
 
 #[derive(Debug)]
 struct Row {
@@ -81,7 +79,7 @@ fn unpad_password(password: Vec<u8>) -> Result<String, String> {
     }
 }
 
-fn rw_password(args: &RwConfig, conn: &mut Connection) -> Result<(), String> {
+fn rw_password<T: GetPassword>(args: &RwConfig<T>, conn: &mut Connection) -> Result<(), String> {
     let mut row: Vec<Row> = conn
         .prepare("SELECT * FROM passwords where name = (?1);")
         .map_err(|e| e.to_string())?
@@ -116,11 +114,7 @@ fn rw_password(args: &RwConfig, conn: &mut Connection) -> Result<(), String> {
         } else if args.generate {
             generate_password(args.genlen)?
         } else {
-            Password::new()
-                .with_prompt("Password")
-                .with_confirmation("Confirm password", "Passwords mismatching")
-                .interact()
-                .map_err(|e| e.to_string())?
+            args.get_password.get_password("New password")?
         })?;
 
         (salt, nonce, password, true)
@@ -144,10 +138,7 @@ fn rw_password(args: &RwConfig, conn: &mut Connection) -> Result<(), String> {
     let encrypt_pass = if let Some(password) = args.encryption_password.as_ref() {
         password.clone()
     } else {
-        Password::new()
-            .with_prompt("Encryption password")
-            .interact()
-            .map_err(|e| e.to_string())?
+        args.get_password.get_password("Encryption password")?
     };
 
     // generate the key
