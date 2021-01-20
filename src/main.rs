@@ -10,8 +10,8 @@ use password::{process, Row};
 fn main() -> Result<(), String> {
     let config = parse_config()?;
 
+    // initialize database
     let mut conn = Connection::open(&config.database).map_err(|e| e.to_string())?;
-
     conn.execute(
         "create table if not exists passwords (
             name text not null primary key,
@@ -64,6 +64,7 @@ fn main() -> Result<(), String> {
         }
     }
 
+    // if to remove something from the database
     if config.remove {
         // insert the generated values
         let tx = conn.transaction().map_err(|e| e.to_string())?;
@@ -73,6 +74,7 @@ fn main() -> Result<(), String> {
         tx.commit().map_err(|e| e.to_string())?;
     }
 
+    // if listing 
     if config.list {
         #[derive(Debug)]
         struct R {

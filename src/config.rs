@@ -177,12 +177,12 @@ pub fn parse_config() -> Result<Config<PasswordRunner>, String> {
             match args.rest {
                 Some(Subcommand::Name(mut name)) => {
                     if name.len() > 1 {
-                        Err("Too many arguments".to_owned())
+                        Err("too many arguments".to_owned())
                     } else {
                         name.pop().ok_or_else(|| "missing name".to_owned())
                     }
                 }
-                _ => Err("Missing name.".to_owned()),
+                _ => Err("missing name.".to_owned()),
             }
         }
     } else {
