@@ -5,7 +5,7 @@ mod password;
 
 use config::parse_config;
 
-use password::rw_password;
+use password::{process, Row};
 
 fn main() -> Result<(), String> {
     let config = parse_config()?;
@@ -23,8 +23,45 @@ fn main() -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
+    // either insert or look up a password
     if !config.remove && !config.list {
-        rw_password(&config.rw_config.unwrap(), &mut conn)?;
+        // query the database and process the results
+        let (salt, nonce, password, insert) = process(
+            conn.prepare("SELECT * FROM passwords where name = (?1);")
+                .map_err(|e| e.to_string())?
+                .query_map(&[&config.name], |row| {
+                    Ok(Row {
+                        name: row.get(0)?,
+                        salt: row.get(1)?,
+                        nonce: row.get(2)?,
+                        password: row.get(3)?,
+                    })
+                })
+                .map_err(|e| e.to_string())?
+                .filter_map(|x| match x {
+                    Ok(row) => Some(row),
+                    Err(_) => None,
+                })
+                .collect(),
+            &config
+                .rw_config
+                .ok_or_else(|| "found not rw config".to_owned())?,
+        )?;
+
+        if insert {
+            // insert the generated values
+            let tx = conn.transaction().map_err(|e| e.to_string())?;
+            // insert the stuff into the database
+            tx.execute(
+                "INSERT INTO passwords values (?1, ?2, ?3, ?4)",
+                &[&config.name, &salt, &nonce, &String::from(password)],
+            )
+            .map_err(|e| e.to_string())?;
+            tx.commit().map_err(|e| e.to_string())?;
+        } else {
+            // print the decrypted password
+            println!("{}", password);
+        }
     }
 
     if config.remove {

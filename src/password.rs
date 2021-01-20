@@ -6,14 +6,38 @@ use openssl::rand::rand_bytes;
 
 use crate::config::{GetPassword, RwConfig};
 
-use rusqlite::{Connection, Result};
-
 #[derive(Debug)]
-struct Row {
-    name: String,
-    salt: String,
-    nonce: String,
-    password: String,
+pub struct Row {
+    pub name: String,
+    pub salt: String,
+    pub nonce: String,
+    pub password: String,
+}
+
+pub struct Password {
+    password: Vec<u8>,
+}
+
+impl From<Vec<u8>> for Password {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self { password: bytes }
+    }
+}
+
+impl From<Password> for String {
+    fn from(password: Password) -> Self {
+        to_hex(password.password)
+    }
+}
+
+impl std::fmt::Display for Password {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            unpad_password(self.password.clone()).map_err(|_| std::fmt::Error)?
+        )
+    }
 }
 
 /// convert from a vector of bytes to a hex string
@@ -76,10 +100,10 @@ fn unpad_password(password: Vec<u8>) -> Result<String, String> {
 }
 
 /// Process the query result
-fn process<T: GetPassword>(
+pub fn process<T: GetPassword>(
     mut row: Vec<Row>,
     args: &RwConfig<T>,
-) -> Result<(String, String, Vec<u8>, bool), String> {
+) -> Result<(String, String, Password, bool), String> {
     let (salt, nonce, mut password, insert) = if let Some(row) = row.pop() {
         // convert the stuff from the database
         (
@@ -127,48 +151,5 @@ fn process<T: GetPassword>(
     let chacha = ChaCha20::new(&key);
     Cipher::encrypt(&chacha, &nonce, &mut password)?;
 
-    Ok((to_hex(salt), to_hex(nonce), password, insert))
-}
-
-pub fn rw_password<T: GetPassword>(
-    args: &RwConfig<T>,
-    conn: &mut Connection,
-) -> Result<(), String> {
-    // query the database and process the results
-    let (salt, nonce, password, insert) = process(
-        conn.prepare("SELECT * FROM passwords where name = (?1);")
-            .map_err(|e| e.to_string())?
-            .query_map(&[&args.name], |row| {
-                Ok(Row {
-                    name: row.get(0)?,
-                    salt: row.get(1)?,
-                    nonce: row.get(2)?,
-                    password: row.get(3)?,
-                })
-            })
-            .map_err(|e| e.to_string())?
-            .filter_map(|x| match x {
-                Ok(row) => Some(row),
-                Err(_) => None,
-            })
-            .collect(),
-        args,
-    )?;
-
-    if insert {
-        // insert the generated values
-        let tx = conn.transaction().map_err(|e| e.to_string())?;
-        // insert the stuff into the database
-        tx.execute(
-            "INSERT INTO passwords values (?1, ?2, ?3, ?4)",
-            &[&args.name, &salt, &nonce, &to_hex(password)],
-        )
-        .map_err(|e| e.to_string())?;
-        tx.commit().map_err(|e| e.to_string())?;
-    } else {
-        // print the decrypted password
-        println!("{}", unpad_password(password)?);
-    }
-
-    Ok(())
+    Ok((to_hex(salt), to_hex(nonce), Password::from(password), insert))
 }
