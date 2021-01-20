@@ -10,30 +10,55 @@ use dialoguer::Password;
 #[structopt(name = "spm", about = "Simple Password Manager.")]
 struct CliOpt {
     #[structopt(long)]
+    /// The encryption password
     pass0: Option<String>,
-    #[structopt(long)]
-    pass1: Option<String>,
-    #[structopt(short, long)]
-    name: Option<String>,
-    #[structopt(long)]
-    database: Option<String>,
-    #[structopt(short, long)]
-    generate: bool,
-    #[structopt(short, long)]
-    remove: bool,
-    #[structopt(short, long)]
-    list: bool,
 
     #[structopt(long)]
+    /// The password to be encrypted
+    pass1: Option<String>,
+
+    #[structopt(short, long)]
+    /// Name of the password
+    name: Option<String>,
+
+    #[structopt(long, default_value = "./passwords.db")]
+    /// The name of the password database
+    database: String,
+
+    #[structopt(short, long)]
+    /// Generate a random password
+    generate: bool,
+
+    #[structopt(short, long)]
+    /// Remove the selected password
+    remove: bool,
+
+    #[structopt(short, long)]
+    /// List all passwords in the database
+    list: bool,
+
+    #[structopt(long, default_value = "16", required_if("generate", "true"))]
+    /// Length of the generated password
+    generation_length: usize,
+
+    #[structopt(long, default_value = "16")]
+    /// number of salt bytes
+    salt_bytes: usize,
+
+    #[structopt(long)]
+    /// Command to get a password, e.g. 'dmenu -P -p'.
+    /// A prompt will be appended to the command.
     pass_cmd: Option<String>,
 
     #[structopt(subcommand)]
+    /// Name
     rest: Option<Subcommand>,
 }
 
 #[derive(StructOpt)]
 enum Subcommand {
     #[structopt(external_subcommand)]
+    /// Name
     Name(Vec<String>),
 }
 
@@ -190,7 +215,7 @@ pub fn parse_config() -> Result<Config<PasswordRunner>, String> {
     }?;
 
     Ok(Config {
-        database: args.database.unwrap_or_else(|| "./passwords.db".to_owned()),
+        database: args.database,
         list: args.list,
         remove: args.remove,
         name: name.clone(),
@@ -205,9 +230,15 @@ pub fn parse_config() -> Result<Config<PasswordRunner>, String> {
                     false,
                     0,
                 ),
-                password: PasswordRunner::new(args.pass1, args.pass_cmd, true, args.generate, 16),
+                password: PasswordRunner::new(
+                    args.pass1,
+                    args.pass_cmd,
+                    true,
+                    args.generate,
+                    args.generation_length,
+                ),
                 name,
-                nsaltbytes: 16,
+                nsaltbytes: args.salt_bytes,
                 iter_count: 1 << 11,
             })
         },
