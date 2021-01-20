@@ -1,12 +1,10 @@
 use codes::crypt::chacha20::ChaCha20;
 use codes::crypt::mac::HMAC;
-use codes::crypt::pbkdf2;
-use codes::crypt::Cipher;
+use codes::crypt::{pbkdf2, Cipher};
 
-use rusqlite::NO_PARAMS;
-use rusqlite::{Connection, Result};
+use rusqlite::{Connection, Result, NO_PARAMS};
 
-use openssl::{base64, rand::rand_bytes};
+use openssl::rand::rand_bytes;
 
 mod config;
 
@@ -54,16 +52,6 @@ fn pad_password(password: String) -> Result<Vec<u8>, String> {
         .collect())
 }
 
-fn generate_password(length: usize) -> Result<String, String> {
-    let mut bytes = [0u8; 256];
-    rand_bytes(&mut bytes).map_err(|e| e.to_string())?;
-
-    let mut res = base64::encode_block(&bytes[..]);
-    res.truncate(length);
-
-    Ok(res)
-}
-
 fn unpad_password(password: Vec<u8>) -> Result<String, String> {
     let mut iterator = password.iter();
 
@@ -108,14 +96,7 @@ fn rw_password<T: GetPassword>(args: &RwConfig<T>, conn: &mut Connection) -> Res
         let salt: Vec<u8> = (&mut buf).take(args.nsaltbytes).collect();
         let nonce: Vec<u8> = buf.take(8).collect();
 
-        let password = pad_password(if let Some(password) = args.password.clone() {
-            // convert the password from a string to a byte vector
-            password
-        } else if args.generate {
-            generate_password(args.genlen)?
-        } else {
-            args.get_password.get_password("New password")?
-        })?;
+        let password = pad_password(args.password.get_password("New password")?)?;
 
         (salt, nonce, password, true)
     } else {
@@ -135,11 +116,9 @@ fn rw_password<T: GetPassword>(args: &RwConfig<T>, conn: &mut Connection) -> Res
         )
     };
 
-    let encrypt_pass = if let Some(password) = args.encryption_password.as_ref() {
-        password.clone()
-    } else {
-        args.get_password.get_password("Encryption password")?
-    };
+    let encrypt_pass = args
+        .encryption_password
+        .get_password("Encryption password")?;
 
     // generate the key
     let key_vec = pbkdf2(
