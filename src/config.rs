@@ -179,7 +179,7 @@ pub fn parse_config() -> Result<Config<PasswordRunner>, String> {
                     if name.len() > 1 {
                         Err("Too many arguments".to_owned())
                     } else {
-                        name.pop().ok_or("missing name".to_owned())
+                        name.pop().ok_or_else(|| "missing name".to_owned())
                     }
                 }
                 _ => Err("Missing name.".to_owned()),
