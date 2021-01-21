@@ -13,11 +13,11 @@ use dialoguer::Password;
 struct CliOpt {
     #[structopt(long)]
     /// The encryption password
-    pass0: Option<String>,
+    encrypt_pass: Option<String>,
 
     #[structopt(long)]
     /// The password to be encrypted
-    pass1: Option<String>,
+    password: Option<String>,
 
     #[structopt(short, long)]
     /// Name of the password
@@ -53,7 +53,8 @@ struct CliOpt {
     iteration_count: usize,
 
     #[structopt(long)]
-    /// Command to get a password, e.g. 'dmenu -P -p'.
+    /// Command to get a password, e.g. 'dmenu -p'.
+    /// If you want to use dmenu, I reccoment the password patch.
     /// A prompt will be appended to the command.
     pass_cmd: Option<String>,
 
@@ -231,14 +232,14 @@ pub fn parse_config() -> Result<Config<PasswordRunner>, String> {
         } else {
             Some(RwConfig {
                 encryption_password: PasswordRunner::new(
-                    args.pass0,
+                    args.encrypt_pass,
                     args.pass_cmd.clone(),
                     false,
                     false,
                     0,
                 ),
                 password: PasswordRunner::new(
-                    args.pass1,
+                    args.password,
                     args.pass_cmd,
                     true,
                     args.generate,
