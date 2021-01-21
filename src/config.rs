@@ -19,10 +19,6 @@ struct CliOpt {
     /// The password to be encrypted
     password: Option<String>,
 
-    #[structopt(short, long)]
-    /// Name of the password
-    name: Option<String>,
-
     #[structopt(long, default_value = "./passwords.db", parse(from_os_str))]
     /// The name of the password database
     database: PathBuf,
@@ -58,16 +54,9 @@ struct CliOpt {
     /// A prompt will be appended to the command.
     pass_cmd: Option<String>,
 
-    #[structopt(subcommand)]
-    /// Name
-    rest: Option<Subcommand>,
-}
-
-#[derive(StructOpt)]
-enum Subcommand {
-    #[structopt(external_subcommand)]
-    /// Name
-    Name(Vec<String>),
+    #[structopt(required_if("list", "false"))]
+    /// The name of the password
+    name: Option<String>,
 }
 
 /// configuration for rw password
@@ -80,7 +69,7 @@ pub struct RwConfig<T: GetPassword> {
     pub name: String,
     /// number of bytes in the pbkdf2 salt (default 16)
     pub nsaltbytes: usize,
-    /// iteration count for pbkdf2 (default 1 << 14). Possible values (based on reccomendation from RFC8018), 
+    /// iteration count for pbkdf2 (default 1 << 14). Possible values (based on reccomendation from RFC8018),
     pub iter_count: usize,
 }
 
@@ -207,16 +196,7 @@ pub fn parse_config() -> Result<Config<PasswordRunner>, String> {
         if let Some(name) = args.name {
             Ok(name)
         } else {
-            match args.rest {
-                Some(Subcommand::Name(mut name)) => {
-                    if name.len() > 1 {
-                        Err("too many arguments".to_owned())
-                    } else {
-                        name.pop().ok_or_else(|| "missing name".to_owned())
-                    }
-                }
-                _ => Err("missing name.".to_owned()),
-            }
+            Err("Missing name.".to_owned())
         }
     } else {
         Ok("".to_owned())
